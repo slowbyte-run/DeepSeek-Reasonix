@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -153,8 +154,12 @@ func (m machine) absolute(p string) bool {
 }
 
 // resolve finds the first declared way of starting t that is installed, and
-// the call that starts it on dir.
+// the call that starts it on dir. A target its environment names a declared
+// command for starts that one first.
 func (m machine) resolve(t target, dir string) (call, bool) {
+	if c, ok := m.named(t, dir); ok {
+		return c, true
+	}
 	for _, r := range t.by[m.goos] {
 		for _, c := range m.candidates(r) {
 			if !m.launchable(c) {
@@ -166,6 +171,30 @@ func (m machine) resolve(t target, dir string) (call, bool) {
 					continue
 				}
 				return call{exe: open, args: append(append([]string{"-a", c.path}, r.lead...), r.glue+dir)}, true
+			}
+			return call{exe: c.path, args: append(append([]string{}, r.lead...), r.glue+dir)}, true
+		}
+	}
+	return call{}, false
+}
+
+// named is the call starting the command t's environment variable names, when
+// that name is one the table declares. The value selects among declared
+// programs and says nothing about where one lives: an undeclared name, or one
+// carrying arguments, selects nothing, and the table's own order stands.
+func (m machine) named(t target, dir string) (call, bool) {
+	if t.env == "" {
+		return call{}, false
+	}
+	name := filepath.Base(strings.TrimSpace(m.getenv(t.env)))
+	for _, r := range t.by[m.goos] {
+		declared := slices.Contains(r.commands, name)
+		if !declared {
+			continue
+		}
+		for _, c := range m.onPath(name) {
+			if !m.launchable(c) {
+				continue
 			}
 			return call{exe: c.path, args: append(append([]string{}, r.lead...), r.glue+dir)}, true
 		}

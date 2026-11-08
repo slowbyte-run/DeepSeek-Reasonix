@@ -18,6 +18,8 @@ type target struct {
 	id   string
 	name string
 	by   map[string][]recipe
+	// env names a variable whose value picks among the declared commands.
+	env string
 }
 
 var targets = []target{
@@ -45,10 +47,13 @@ var targets = []target{
 		"darwin": {{apps: []string{"IntelliJ IDEA", "IntelliJ IDEA CE"}}},
 		"linux":  {{commands: []string{"idea", "intellij-idea-ultimate", "intellij-idea-community"}}},
 	}},
-	{id: "terminal", name: "Terminal", by: map[string][]recipe{
+	{id: "terminal", name: "Terminal", env: "TERMINAL", by: map[string][]recipe{
 		"windows": {{exes: []string{`%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe`}, lead: []string{"-d"}}},
 		"darwin":  {{apps: []string{"Terminal"}}},
+		// xdg-terminal-exec reads the desktop's own default-terminal list, which
+		// is where a person states this machine's choice.
 		"linux": {
+			{commands: []string{"xdg-terminal-exec"}, glue: "--dir="},
 			{commands: []string{"gnome-terminal"}, glue: "--working-directory="},
 			{commands: []string{"konsole"}, lead: []string{"--workdir"}},
 			{commands: []string{"xfce4-terminal"}, glue: "--working-directory="},

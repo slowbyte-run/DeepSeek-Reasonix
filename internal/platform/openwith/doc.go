@@ -10,4 +10,9 @@
 //
 // An executable found inside a project folder is refused: a project must not be
 // able to put a program of its own where a launcher would find it.
+//
+// Which terminal a machine uses is stated, not guessed: TERMINAL picks among
+// the declared ones, and failing that xdg-terminal-exec reads the desktop's
+// default list. Either way a name selects a declared program and never supplies
+// the path that is started.
 package openwith

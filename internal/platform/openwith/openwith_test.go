@@ -288,3 +288,86 @@ func TestAProgramOutsideEveryProjectCarriesNoReason(t *testing.T) {
 		}
 	}
 }
+
+// A machine whose environment names a declared terminal starts that one, not
+// whichever the table happens to list first.
+func TestTheTerminalTheEnvironmentNamesIsStartedBeforeTheTableOrder(t *testing.T) {
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin", "TERMINAL": "kitty"})
+	f.files["/usr/bin/gnome-terminal"] = true
+	f.files["/usr/bin/konsole"] = true
+	f.files["/usr/bin/kitty"] = true
+	f.dirs["/work/p"] = true
+	if _, err := f.m.open("terminal", "/work/p"); err != nil {
+		t.Fatal(err)
+	}
+	want := []call{{"/usr/bin/kitty", []string{"--directory", "/work/p"}}}
+	if !reflect.DeepEqual(f.started, want) {
+		t.Fatalf("started %v, want %v", f.started, want)
+	}
+}
+
+// The desktop's own default-terminal list is next, through the program that
+// reads it, so a machine with nothing in $TERMINAL still opens the right one.
+func TestTheDesktopsDefaultTerminalIsStartedBeforeTheFallbackOrder(t *testing.T) {
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin"})
+	f.files["/usr/bin/xdg-terminal-exec"] = true
+	f.files["/usr/bin/konsole"] = true
+	f.dirs["/work/p"] = true
+	if _, err := f.m.open("terminal", "/work/p"); err != nil {
+		t.Fatal(err)
+	}
+	want := []call{{"/usr/bin/xdg-terminal-exec", []string{"--dir=/work/p"}}}
+	if !reflect.DeepEqual(f.started, want) {
+		t.Fatalf("started %v, want %v", f.started, want)
+	}
+}
+
+// A name the table does not declare selects nothing: it never becomes a program
+// to start, and the declared order stands.
+func TestATerminalTheTableDoesNotDeclareFallsThrough(t *testing.T) {
+	for _, value := range []string{"foot", "/opt/mine/bin/console", "kitty --single-instance", "", "  "} {
+		f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin", "TERMINAL": value})
+		f.files["/usr/bin/gnome-terminal"] = true
+		f.dirs["/work/p"] = true
+		if _, err := f.m.open("terminal", "/work/p"); err != nil {
+			t.Fatalf("%q: %v", value, err)
+		}
+		want := []call{{"/usr/bin/gnome-terminal", []string{"--working-directory=/work/p"}}}
+		if !reflect.DeepEqual(f.started, want) {
+			t.Fatalf("TERMINAL=%q started %v, want %v", value, f.started, want)
+		}
+	}
+}
+
+// The name picks among the declared programs; the table still decides where the
+// executable is, so a path the environment supplies is never the one started.
+func TestTheNamedTerminalIsFoundOnPathNotWhereTheEnvironmentPoints(t *testing.T) {
+	f := newFake(t, "linux", map[string]string{"PATH": "/usr/bin", "TERMINAL": "/opt/mine/bin/kitty"})
+	f.files["/opt/mine/bin/kitty"] = true
+	f.files["/usr/bin/kitty"] = true
+	f.dirs["/work/p"] = true
+	if _, err := f.m.open("terminal", "/work/p"); err != nil {
+		t.Fatal(err)
+	}
+	want := []call{{"/usr/bin/kitty", []string{"--directory", "/work/p"}}}
+	if !reflect.DeepEqual(f.started, want) {
+		t.Fatalf("started %v, want %v", f.started, want)
+	}
+}
+
+// A terminal the environment names inside a project folder is the project's
+// program and is passed over, exactly as a declared one there would be.
+func TestANamedTerminalInsideAProjectIsNeverStarted(t *testing.T) {
+	f := newFake(t, "linux", map[string]string{"PATH": "/work/p/node_modules/.bin:/usr/bin", "TERMINAL": "kitty"})
+	f.m.forbidden = []string{"/work/p"}
+	f.files["/work/p/node_modules/.bin/kitty"] = true
+	f.files["/usr/bin/gnome-terminal"] = true
+	f.dirs["/work/p"] = true
+	if _, err := f.m.open("terminal", "/work/p"); err != nil {
+		t.Fatal(err)
+	}
+	want := []call{{"/usr/bin/gnome-terminal", []string{"--working-directory=/work/p"}}}
+	if !reflect.DeepEqual(f.started, want) {
+		t.Fatalf("started %v, want %v", f.started, want)
+	}
+}
